@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once __DIR__ . '/../database.php';
+require_once '../config/database.php';
 
 // CSRF Token Generation
 if (empty($_SESSION['csrf_token'])) {
@@ -660,25 +660,25 @@ for ($i = 29; $i >= 0; $i--) {
         <!-- Navigation -->
         <div class="admin-nav">
             <a href="dashboard.php" class="active">📊 Dashboard</a>
-            <a href="../users.php">👥 Users</a>
-            <a href="../listings.php">📝 Listings</a>
-            <a href="../upgrades.php">
+            <a href="users.php">👥 Users</a>
+            <a href="listings.php">📝 Listings</a>
+            <a href="upgrades.php">
                 💎 Upgrades
                 <?php if ($stats['pending_upgrades'] > 0): ?>
                     <span class="badge"><?php echo $stats['pending_upgrades']; ?></span>
                 <?php endif; ?>
             </a>
-            <a href="../reports.php">
+            <a href="reports.php">
                 🚨 Reports
                 <?php if ($stats['pending_reports'] > 0): ?>
                     <span class="badge"><?php echo $stats['pending_reports']; ?></span>
                 <?php endif; ?>
             </a>
-            <a href="../moderate-listings.php">⚖️ Moderate</a>
-            <a href="../announcements.php">📢 Announcements</a>
-            <a href="../categories.php">📁 Categories</a>
-            <a href="../settings.php">⚙️ Settings</a>
-            <a href="../maintenance.php">🔧 Maintenance</a>
+            <a href="moderate-listings.php">⚖️ Moderate</a>
+            <a href="announcements.php">📢 Announcements</a>
+            <a href="categories.php">📁 Categories</a>
+            <a href="settings.php">⚙️ Settings</a>
+            <a href="maintenance.php">🔧 Maintenance</a>
         </div>
 
         <!-- Statistics Grid -->
@@ -840,7 +840,7 @@ for ($i = 29; $i >= 0; $i--) {
                 <h2>⚡ Quick Actions</h2>
             </div>
             <div class="quick-actions">
-                <a href="../moderate-listings.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
+                <a href="moderate-listings.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
                     <div class="icon">✅</div>
                     <div>Approve Listings</div>
                     <?php if ($stats['pending_listings'] > 0): ?>
@@ -849,7 +849,7 @@ for ($i = 29; $i >= 0; $i--) {
                         </div>
                     <?php endif; ?>
                 </a>
-                <a href="../reports.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
+                <a href="reports.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
                     <div class="icon">🚨</div>
                     <div>Review Reports</div>
                     <?php if ($stats['pending_reports'] > 0): ?>
@@ -858,7 +858,7 @@ for ($i = 29; $i >= 0; $i--) {
                         </div>
                     <?php endif; ?>
                 </a>
-                <a href="../upgrades.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
+                <a href="upgrades.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
                     <div class="icon">💎</div>
                     <div>Manage Upgrades</div>
                     <?php if ($stats['pending_upgrades'] > 0): ?>
@@ -867,7 +867,7 @@ for ($i = 29; $i >= 0; $i--) {
                         </div>
                     <?php endif; ?>
                 </a>
-                <a href="../announcements.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
+                <a href="announcements.php" class="quick-action-card" style="text-decoration: none; color: var(--text-white);">
                     <div class="icon">📢</div>
                     <div>Send Announcement</div>
                 </a>
@@ -880,7 +880,7 @@ for ($i = 29; $i >= 0; $i--) {
             <div class="admin-section">
                 <div class="section-header">
                     <h2>👥 Recent Users</h2>
-                    <a href="../users.php" class="btn btn-primary">View All</a>
+                    <a href="users.php" class="btn btn-primary">View All</a>
                 </div>
                 <?php if (count($recent_users) > 0): ?>
                     <div style="overflow-x: auto;">
@@ -934,7 +934,7 @@ for ($i = 29; $i >= 0; $i--) {
             <div class="admin-section">
                 <div class="section-header">
                     <h2>📝 Recent Listings</h2>
-                    <a href="../listings.php" class="btn btn-primary">View All</a>
+                    <a href="listings.php" class="btn btn-primary">View All</a>
                 </div>
                 <?php if (count($recent_listings) > 0): ?>
                     <div style="overflow-x: auto;">
@@ -984,7 +984,7 @@ for ($i = 29; $i >= 0; $i--) {
         <div class="admin-section full-width">
             <div class="section-header">
                 <h2>🚨 Pending Reports</h2>
-                <a href="../reports.php" class="btn btn-primary">View All Reports</a>
+                <a href="reports.php" class="btn btn-primary">View All Reports</a>
             </div>
             <div style="overflow-x: auto;">
                 <table class="data-table">
