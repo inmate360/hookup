@@ -101,7 +101,7 @@ doublelist-clone/
 - [ ] Favorite/bookmark listings
 - [ ] Email notifications
 - [ ] Advanced search filters
-- [ ] Location-based search with maps
+- [✅] Location-based search with maps
 - [ ] Mobile app API
 
 ## Usage
