@@ -3,24 +3,41 @@
 $unread_messages = 0;
 $unread_notifications = 0;
 $incognito_active = false;
+$is_admin = false;
+$is_moderator = false;
 
 if(isset($_SESSION['user_id'])) {
-    require_once __DIR__ . '/../config/database.php';
-    require_once __DIR__ . '/../classes/Message.php';
-    require_once __DIR__ . '/../classes/SmartNotifications.php';
-    require_once __DIR__ . '/../classes/IncognitoMode.php';
+    require_once __DIR__ . '/database.php';
+    require_once __DIR__ . '/Message.php';
+    require_once __DIR__ . '/SmartNotifications.php';
+    require_once __DIR__ . '/IncognitoMode.php';
+    require_once __DIR__ . '/Moderator.php';
     
     $db_header = new Database();
     $conn_header = $db_header->getConnection();
     
+    // Get message count
     $msg_header = new Message($conn_header);
     $unread_messages = $msg_header->getTotalUnreadCount($_SESSION['user_id']);
     
+    // Get notification count
     $notif_header = new SmartNotifications($conn_header);
     $unread_notifications = $notif_header->getUnreadCount($_SESSION['user_id']);
     
+    // Check incognito status
     $incognito_header = new IncognitoMode($conn_header);
     $incognito_active = $incognito_header->isActive($_SESSION['user_id']);
+    
+    // Check admin status
+    $admin_check = $conn_header->prepare("SELECT is_admin FROM users WHERE id = :id LIMIT 1");
+    $admin_check->bindParam(':id', $_SESSION['user_id'], PDO::PARAM_INT);
+    $admin_check->execute();
+    $admin_result = $admin_check->fetch(PDO::FETCH_ASSOC);
+    $is_admin = $admin_result && $admin_result['is_admin'] == 1;
+    
+    // Check moderator status
+    $mod_check = new Moderator($conn_header);
+    $is_moderator = $mod_check->isModerator($_SESSION['user_id']);
 }
 
 // Get current page for active state
@@ -31,86 +48,327 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <meta name="description" content="Turnpage - Local hookup classifieds. Post and browse personal ads in your area.">
+    <meta name="description" content="Turnpage - Local hookup classifieds and marketplace. Post ads, buy & sell, and connect in your area.">
     <meta name="theme-color" content="#4267F5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Turnpage">
-    <title>Turnpage - Local Hookup Classifieds</title>
+    <title>Turnpage - Local Hookup Classifieds & Marketplace</title>
     <link rel="stylesheet" href="/assets/css/dark-blue-theme.css">
     <link rel="stylesheet" href="/assets/css/bottom-nav.css">
     <meta name="format-detection" content="telephone=no">
     <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+    <style>
+        .navbar-enhanced {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-bottom: 2px solid rgba(66, 103, 245, 0.3);
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 70px;
+        }
+        
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .nav-brand:hover {
+            transform: scale(1.05);
+        }
+        
+        .nav-brand .brand-icon {
+            font-size: 2rem;
+            filter: drop-shadow(0 2px 4px rgba(66, 103, 245, 0.5));
+        }
+        
+        .nav-center {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .nav-link {
+            padding: 0.75rem 1.25rem;
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+        }
+        
+        .nav-link:hover {
+            background: rgba(66, 103, 245, 0.2);
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .nav-link.active {
+            background: rgba(66, 103, 245, 0.3);
+            color: white;
+            border: 1px solid rgba(66, 103, 245, 0.5);
+        }
+        
+        .nav-link.admin-link {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.3));
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            animation: pulse-admin 2s infinite;
+        }
+        
+        @keyframes pulse-admin {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        }
+        
+        .nav-link.marketplace-link {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.3));
+            border: 1px solid rgba(245, 158, 11, 0.5);
+        }
+        
+        .badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+        }
+        
+        .dropdown {
+            position: relative;
+        }
+        
+        .dropdown-toggle {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .dropdown-toggle::after {
+            content: '▼';
+            font-size: 0.7rem;
+            transition: transform 0.3s;
+        }
+        
+        .dropdown.active .dropdown-toggle::after {
+            transform: rotate(180deg);
+        }
+        
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: #1a1a2e;
+            border: 2px solid rgba(66, 103, 245, 0.3);
+            border-radius: 12px;
+            min-width: 220px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s;
+            z-index: 1001;
+        }
+        
+        .dropdown.active .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .dropdown-item {
+            padding: 0.875rem 1.25rem;
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.3s;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.95rem;
+        }
+        
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        
+        .dropdown-item:hover {
+            background: rgba(66, 103, 245, 0.2);
+            color: white;
+            padding-left: 1.5rem;
+        }
+        
+        .dropdown-divider {
+            height: 2px;
+            background: rgba(66, 103, 245, 0.3);
+            margin: 0.5rem 0;
+        }
+        
+        .mobile-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .nav-center {
+                position: fixed;
+                top: 70px;
+                left: 0;
+                right: 0;
+                background: #1a1a2e;
+                flex-direction: column;
+                padding: 1rem;
+                gap: 0.5rem;
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                max-height: calc(100vh - 70px);
+                overflow-y: auto;
+            }
+            
+            .nav-center.active {
+                transform: translateX(0);
+            }
+            
+            .mobile-toggle {
+                display: block;
+            }
+            
+            .nav-link {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            
+            .dropdown-menu {
+                position: relative;
+                top: 0;
+                box-shadow: none;
+                border: none;
+                border-left: 2px solid rgba(66, 103, 245, 0.5);
+                margin-left: 1rem;
+                border-radius: 0;
+            }
+        }
+    </style>
 </head>
 <body class="<?php echo isset($_SESSION['user_id']) ? 'has-bottom-nav' : ''; ?>">
-    <nav class="navbar-blue">
-        <div class="container">
-            <div class="nav-brand">
-                <div class="brand-icon-small">📋</div>
-                <a href="<?php echo isset($_SESSION['current_city']) ? '/city.php?location=' . $_SESSION['current_city'] : '/choose-location.php'; ?>">
-                    Turnpage
-                </a>
-            </div>
-            <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
-                <span></span>
-                <span></span>
-                <span></span>
+    <nav class="navbar-enhanced">
+        <div class="nav-container">
+            <a href="<?php echo isset($_SESSION['current_city']) ? '/city.php?location=' . $_SESSION['current_city'] : '/choose-location.php'; ?>" class="nav-brand">
+                <span class="brand-icon">📋</span>
+                <span>Turnpage</span>
+            </a>
+            
+            <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu">
+                ☰
             </button>
-            <div class="nav-menu" id="navMenu" role="navigation">
+            
+            <div class="nav-center" id="navCenter">
+                <a href="/browse.php" class="nav-link <?php echo $current_page == 'browse' ? 'active' : ''; ?>">
+                    🔍 Browse
+                </a>
+                
+                <a href="/marketplace.php" class="nav-link marketplace-link <?php echo $current_page == 'marketplace' ? 'active' : ''; ?>">
+                    🛍️ Marketplace
+                </a>
+                
                 <?php if(isset($_SESSION['user_id'])): ?>
-                    
-                    <a href="/my-listings.php" class="<?php echo $current_page == 'my-listings' ? 'active' : ''; ?>">
-                        📝 My Ads
+                    <a href="/create-listing.php" class="nav-link <?php echo $current_page == 'create-listing' ? 'active' : ''; ?>">
+                        ➕ Post Ad
                     </a>
                     
-                    <a href="/messages.php" class="<?php echo $current_page == 'messages' ? 'active' : ''; ?>">
-                        💬 Messages 
+                    <a href="/messages.php" class="nav-link <?php echo $current_page == 'messages' ? 'active' : ''; ?>">
+                        💬 Messages
                         <?php if($unread_messages > 0): ?>
-                            <span class="notification-badge"><?php echo $unread_messages; ?></span>
+                            <span class="badge"><?php echo $unread_messages; ?></span>
                         <?php endif; ?>
                     </a>
                     
-                    <a href="/notifications.php" class="<?php echo $current_page == 'notifications' ? 'active' : ''; ?>">
-                        🔔
-                        <?php if($unread_notifications > 0): ?>
-                            <span class="notification-badge"><?php echo $unread_notifications; ?></span>
-                        <?php endif; ?>
+                    <?php if($is_admin): ?>
+                    <a href="/admin/dashboard.php" class="nav-link admin-link">
+                        🛡️ Admin
                     </a>
-                    
-                    <a href="/profile.php?id=<?php echo $_SESSION['user_id']; ?>" class="<?php echo $current_page == 'profile' ? 'active' : ''; ?>">
-                        👤 Profile
-                    </a>
-                    
-                    <a href="/settings.php" class="<?php echo $current_page == 'settings' ? 'active' : ''; ?>">
-                        ⚙️ Settings
-                    </a>
-                    
-                    <?php 
-                    // Check if moderator
-                    if(isset($conn_header)) {
-                        require_once __DIR__ . '/../classes/Moderator.php';
-                        $mod_check = new Moderator($conn_header);
-                        if($mod_check->isModerator($_SESSION['user_id'])): 
-                    ?>
-                    <a href="/moderator/dashboard.php" style="color: var(--featured-gold); font-weight: bold;">
+                    <?php elseif($is_moderator): ?>
+                    <a href="/moderator/dashboard.php" class="nav-link" style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5);">
                         🛡️ Moderator
                     </a>
-                    <?php 
-                        endif;
-                    }
-                    ?>
+                    <?php endif; ?>
                     
-                    <a href="/logout.php">Logout</a>
+                    <div class="dropdown" id="userDropdown">
+                        <div class="nav-link dropdown-toggle">
+                            👤 <?php echo htmlspecialchars($_SESSION['username'] ?? 'Account'); ?>
+                        </div>
+                        <div class="dropdown-menu">
+                            <a href="/profile.php?id=<?php echo $_SESSION['user_id']; ?>" class="dropdown-item">
+                                👤 My Profile
+                            </a>
+                            <a href="/my-listings.php" class="dropdown-item">
+                                📝 My Ads
+                            </a>
+                            <a href="/favorites.php" class="dropdown-item">
+                                ⭐ Favorites
+                            </a>
+                            <a href="/notifications.php" class="dropdown-item">
+                                🔔 Notifications
+                                <?php if($unread_notifications > 0): ?>
+                                    <span class="badge" style="position: static; margin-left: auto;"><?php echo $unread_notifications; ?></span>
+                                <?php endif; ?>
+                            </a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/membership.php" class="dropdown-item">
+                                💎 Premium
+                            </a>
+                            <a href="/settings.php" class="dropdown-item">
+                                ⚙️ Settings
+                            </a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/logout.php" class="dropdown-item" style="color: #ef4444;">
+                                🚪 Logout
+                            </a>
+                        </div>
+                    </div>
                 <?php else: ?>
-                    <a href="/membership.php" class="<?php echo $current_page == 'membership' ? 'active' : ''; ?>">
+                    <a href="/membership.php" class="nav-link <?php echo $current_page == 'membership' ? 'active' : ''; ?>">
                         💎 Premium
                     </a>
-                    <a href="/login.php" class="<?php echo $current_page == 'login' ? 'active' : ''; ?>">
-                        Login
+                    <a href="/login.php" class="nav-link <?php echo $current_page == 'login' ? 'active' : ''; ?>">
+                        🔐 Login
                     </a>
-                    <a href="/register.php" class="btn-primary btn-small">
-                        Sign Up
+                    <a href="/register.php" class="nav-link" style="background: linear-gradient(135deg, #4267f5, #06b6d4); border: 1px solid rgba(66, 103, 245, 0.5);">
+                        ✨ Sign Up
                     </a>
                 <?php endif; ?>
             </div>
@@ -118,8 +376,8 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
     </nav>
     
     <?php if($incognito_active && isset($_SESSION['user_id'])): ?>
-    <div class="incognito-indicator">
-        🕶️ Incognito Mode Active
+    <div style="background: linear-gradient(135deg, rgba(107, 114, 128, 0.3), rgba(75, 85, 99, 0.3)); padding: 0.75rem; text-align: center; border-bottom: 1px solid rgba(107, 114, 128, 0.5); color: white; font-size: 0.9rem;">
+        🕶️ <strong>Incognito Mode Active</strong> - Your profile is hidden from search
     </div>
     <?php endif; ?>
     
@@ -133,6 +391,16 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                 <span class="bottom-nav-label">Home</span>
             </a>
             
+            <a href="/marketplace.php" class="bottom-nav-item <?php echo $current_page == 'marketplace' ? 'active' : ''; ?>">
+                <div class="bottom-nav-icon">🛍️</div>
+                <span class="bottom-nav-label">Market</span>
+            </a>
+            
+            <a href="/create-listing.php" class="bottom-nav-item <?php echo $current_page == 'create-listing' ? 'active' : ''; ?>">
+                <div class="bottom-nav-icon">➕</div>
+                <span class="bottom-nav-label">Post</span>
+            </a>
+            
             <a href="/messages.php" class="bottom-nav-item <?php echo $current_page == 'messages' ? 'active' : ''; ?>">
                 <div class="bottom-nav-icon">💬</div>
                 <span class="bottom-nav-label">Messages</span>
@@ -141,19 +409,9 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
                 <?php endif; ?>
             </a>
             
-            <a href="/my-listings.php" class="bottom-nav-item <?php echo $current_page == 'my-listings' ? 'active' : ''; ?>">
-                <div class="bottom-nav-icon">📝</div>
-                <span class="bottom-nav-label">My Posts</span>
-            </a>
-            
-            <a href="/create-listing.php" class="bottom-nav-item <?php echo $current_page == 'create-listing' ? 'active' : ''; ?>">
-                <div class="bottom-nav-icon">➕</div>
-                <span class="bottom-nav-label">New Post</span>
-            </a>
-            
-            <a href="/favorites.php" class="bottom-nav-item <?php echo $current_page == 'favorites' ? 'active' : ''; ?>">
-                <div class="bottom-nav-icon">⭐</div>
-                <span class="bottom-nav-label">Favorites</span>
+            <a href="/profile.php?id=<?php echo $_SESSION['user_id']; ?>" class="bottom-nav-item <?php echo $current_page == 'profile' ? 'active' : ''; ?>">
+                <div class="bottom-nav-icon">👤</div>
+                <span class="bottom-nav-label">Profile</span>
             </a>
         </div>
     </nav>
@@ -162,41 +420,32 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
     <main>
 
 <script>
-// Mobile menu toggle
 document.addEventListener('DOMContentLoaded', function() {
-    const menuToggle = document.getElementById('menuToggle');
-    const navMenu = document.getElementById('navMenu');
+    // Mobile menu toggle
+    const mobileToggle = document.getElementById('mobileToggle');
+    const navCenter = document.getElementById('navCenter');
     
-    if(menuToggle && navMenu) {
-        menuToggle.addEventListener('click', function(e) {
+    if(mobileToggle && navCenter) {
+        mobileToggle.addEventListener('click', function() {
+            navCenter.classList.toggle('active');
+            this.textContent = navCenter.classList.contains('active') ? '✕' : '☰';
+        });
+    }
+    
+    // Dropdown toggle
+    const dropdown = document.getElementById('userDropdown');
+    if(dropdown) {
+        const toggle = dropdown.querySelector('.dropdown-toggle');
+        toggle.addEventListener('click', function(e) {
             e.stopPropagation();
-            this.classList.toggle('active');
-            navMenu.classList.toggle('active');
-            
-            // Prevent body scroll when menu is open
-            if(navMenu.classList.contains('active')) {
-                document.body.style.overflow = 'hidden';
-            } else {
-                document.body.style.overflow = '';
-            }
+            dropdown.classList.toggle('active');
         });
         
-        // Close menu when clicking outside
+        // Close dropdown when clicking outside
         document.addEventListener('click', function(e) {
-            if(!navMenu.contains(e.target) && !menuToggle.contains(e.target)) {
-                menuToggle.classList.remove('active');
-                navMenu.classList.remove('active');
-                document.body.style.overflow = '';
+            if(!dropdown.contains(e.target)) {
+                dropdown.classList.remove('active');
             }
-        });
-        
-        // Close menu when clicking a link
-        navMenu.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', function() {
-                menuToggle.classList.remove('active');
-                navMenu.classList.remove('active');
-                document.body.style.overflow = '';
-            });
         });
     }
 });
