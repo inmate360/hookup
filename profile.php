@@ -138,7 +138,7 @@ include 'views/header.php';
                     <?php else: ?>
                         <?php if(isset($_SESSION['user_id'])): ?>
                             <?php if($can_message): ?>
-                                <a href="send-message.php?user_id=<?php echo $profile_user_id; ?>" class="btn-primary">
+                                <a href="messages-compose.php?to=<?php echo $profile_user_id; ?>" class="btn-primary">
                                     💬 Send Message
                                     <?php if(!$message_limit_info['is_premium']): ?>
                                     <span style="font-size: 0.85rem; opacity: 0.9;">
