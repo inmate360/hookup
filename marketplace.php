@@ -1,23 +1,102 @@
 <?php
+session_start();
 require_once 'config/database.php';
 require_once 'includes/functions.php';
+require_once 'includes/maintenance_check.php';
 
-session_start();
+$database = new Database();
+$db = $database->getConnection();
 
-// Initialize variables with empty arrays if not set
+// Check for maintenance mode
+if(checkMaintenanceMode($db)) {
+    header('Location: maintenance.php');
+    exit();
+}
+
+// Initialize arrays
 $featured_creators = [];
 $users = [];
 
-// Add your database query logic here to populate $featured_creators and $users
-// Example:
-// $featured_creators = getFeaturedCreators($db);
-// $users = getAllUsers($db);
-
-// Ensure variables are arrays
-if (!is_array($featured_creators)) {
+try {
+    // Fetch featured creators (verified or creator badge holders)
+    $featured_query = "
+        SELECT 
+            u.id,
+            u.username,
+            COALESCE(u.username, '') as display_name,
+            u.avatar,
+            u.verified,
+            u.creator,
+            u.last_seen,
+            CASE 
+                WHEN TIMESTAMPDIFF(MINUTE, u.last_seen, NOW()) < 15 THEN 1 
+                ELSE 0 
+            END as is_online,
+            '' as cover_image,
+            0 as subscription_price,
+            0 as post_count,
+            0 as is_subscribed,
+            0 as is_free
+        FROM users u
+        WHERE (u.verified = 1 OR u.creator = 1)
+        ORDER BY u.verified DESC, u.creator DESC, u.last_seen DESC
+        LIMIT 12
+    ";
+    
+    $stmt = $db->prepare($featured_query);
+    $stmt->execute();
+    $featured_creators = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Process featured creators
+    foreach ($featured_creators as &$creator) {
+        $creator['is_verified'] = (int)$creator['verified'];
+        $creator['is_creator'] = (int)$creator['creator'];
+        $creator['avatar'] = getUserAvatar($creator['avatar']);
+        $creator['cover_image'] = getUserCover($creator['cover_image'] ?? '');
+    }
+    unset($creator);
+    
+    // Fetch all active users
+    $users_query = "
+        SELECT 
+            u.id,
+            u.username,
+            COALESCE(u.username, '') as display_name,
+            u.avatar,
+            u.verified,
+            u.creator,
+            u.last_seen,
+            CASE 
+                WHEN TIMESTAMPDIFF(MINUTE, u.last_seen, NOW()) < 15 THEN 1 
+                ELSE 0 
+            END as is_online,
+            '' as cover_image,
+            0 as subscription_price,
+            0 as post_count,
+            0 as is_subscribed,
+            0 as is_free
+        FROM users u
+        WHERE u.id NOT IN (SELECT id FROM users WHERE verified = 1 OR creator = 1)
+        ORDER BY u.last_seen DESC
+        LIMIT 50
+    ";
+    
+    $stmt = $db->prepare($users_query);
+    $stmt->execute();
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Process users
+    foreach ($users as &$user) {
+        $user['is_verified'] = (int)$user['verified'];
+        $user['is_creator'] = (int)$user['creator'];
+        $user['avatar'] = getUserAvatar($user['avatar']);
+        $user['cover_image'] = getUserCover($user['cover_image'] ?? '');
+    }
+    unset($user);
+    
+} catch (PDOException $e) {
+    error_log("Marketplace Error: " . $e->getMessage());
     $featured_creators = [];
-}
-if (!is_array($users)) {
     $users = [];
 }
 
@@ -240,26 +319,6 @@ include 'views/header.php';
   grid-template-columns: 1fr;
 }
 
-.loading-spinner {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 3rem;
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid var(--border);
-  border-top-color: var(--blue);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
@@ -276,27 +335,6 @@ include 'views/header.php';
   color: var(--text);
   font-size: 1.5rem;
   margin-bottom: 0.5rem;
-}
-
-.load-more-btn {
-  display: block;
-  width: 100%;
-  max-width: 300px;
-  margin: 2rem auto;
-  padding: 1rem 2rem;
-  background: var(--blue);
-  border: none;
-  border-radius: 15px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.load-more-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 30px rgba(66, 103, 245, 0.4);
 }
 
 /* Enhanced subscription card hover effects */
@@ -384,11 +422,8 @@ include 'views/header.php';
       <button class="filter-chip" data-filter="verified">
         <i class="bi bi-patch-check-fill"></i> Verified
       </button>
-      <button class="filter-chip" data-filter="subscribed">
-        <i class="bi bi-star-fill"></i> Subscribed
-      </button>
-      <button class="filter-chip" data-filter="free">
-        <i class="bi bi-gift"></i> Free
+      <button class="filter-chip" data-filter="creator">
+        <i class="bi bi-star-fill"></i> Creators
       </button>
     </div>
 
@@ -398,7 +433,6 @@ include 'views/header.php';
         <option value="featured">Featured First</option>
         <option value="name">Name (A-Z)</option>
         <option value="online">Online Status</option>
-        <option value="posts">Most Posts</option>
         <option value="recent">Recently Active</option>
       </select>
     </div>
@@ -420,46 +454,41 @@ include 'views/header.php';
   <div class="creator-grid" id="featuredGrid">
     <?php foreach($featured_creators as $user): ?>
       <div class="subscription-card creator-item" 
-           data-name="<?php echo strtolower(htmlspecialchars($user['display_name'] ?? '')); ?>" 
-           data-username="<?php echo strtolower(htmlspecialchars($user['username'] ?? '')); ?>"
-           data-online="<?php echo isset($user['is_online']) && $user['is_online'] ? '1' : '0'; ?>"
-           data-verified="<?php echo isset($user['is_verified']) && $user['is_verified'] ? '1' : '0'; ?>"
-           data-subscribed="<?php echo isset($user['is_subscribed']) && $user['is_subscribed'] ? '1' : '0'; ?>"
-           data-free="<?php echo isset($user['is_free']) && $user['is_free'] ? '1' : '0'; ?>"
+           data-name="<?php echo strtolower(e($user['display_name'])); ?>" 
+           data-username="<?php echo strtolower(e($user['username'])); ?>"
+           data-online="<?php echo $user['is_online'] ? '1' : '0'; ?>"
+           data-verified="<?php echo $user['is_verified'] ? '1' : '0'; ?>"
+           data-creator="<?php echo $user['is_creator'] ? '1' : '0'; ?>"
            onclick="window.location.href='/profile.php?id=<?php echo $user['id']; ?>'">
         <div class="subscription-cover">
-          <?php if(isset($user['cover_image']) && $user['cover_image']): ?>
-            <img src="<?php echo htmlspecialchars($user['cover_image']); ?>" alt="Cover">
+          <?php if($user['cover_image']): ?>
+            <img src="<?php echo e($user['cover_image']); ?>" alt="Cover">
           <?php endif; ?>
           <div class="subscription-status">
-            <?php echo (isset($user['is_online']) && $user['is_online']) ? '<i class="bi bi-circle-fill" style="font-size:0.6rem;color:var(--green)"></i> Available now' : '<i class="bi bi-circle" style="font-size:0.6rem"></i> Offline'; ?>
+            <?php echo $user['is_online'] ? '<i class="bi bi-circle-fill" style="font-size:0.6rem;color:var(--green)"></i> Available now' : '<i class="bi bi-circle" style="font-size:0.6rem"></i> Offline'; ?>
           </div>
         </div>
         <div class="subscription-body">
           <div class="subscription-avatar-wrapper">
             <div class="subscription-avatar">
-              <img src="<?php echo htmlspecialchars($user['avatar'] ?? '/assets/img/default-avatar.png'); ?>" alt="Avatar">
+              <img src="<?php echo e($user['avatar']); ?>" alt="Avatar">
             </div>
-            <?php if(isset($user['is_online']) && $user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
-            <?php if(isset($user['is_verified']) && $user['is_verified']): ?><div class="verification-badge"><i class="bi bi-check"></i></div><?php endif; ?>
+            <?php if($user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
+            <?php if($user['is_verified']): ?><div class="verification-badge"><i class="bi bi-check"></i></div><?php endif; ?>
           </div>
           <div class="subscription-info">
             <div class="subscription-username">
-              <?php echo htmlspecialchars($user['display_name'] ?? 'Unknown'); ?>
-              <?php if(isset($user['is_verified']) && $user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
+              <?php echo e($user['display_name']); ?>
+              <?php if($user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
             </div>
-            <div class="subscription-handle">@<?php echo htmlspecialchars($user['username'] ?? 'unknown'); ?></div>
+            <div class="subscription-handle">@<?php echo e($user['username']); ?></div>
           </div>
           <div class="subscription-actions">
             <a href="/messages-compose.php?to=<?php echo $user['id']; ?>" class="subscription-btn message" onclick="event.stopPropagation();"><i class="bi bi-chat"></i> Message</a>
-            <button class="subscription-btn tip" onclick="event.stopPropagation();showTipModal(<?php echo $user['id']; ?>)"><i class="bi bi-currency-dollar"></i> Tip</button>
+            <a href="/profile.php?id=<?php echo $user['id']; ?>" class="subscription-btn tip" onclick="event.stopPropagation();"><i class="bi bi-person"></i> View Profile</a>
           </div>
-          <?php if(isset($user['is_free']) && $user['is_free']): ?>
-          <div class="subscription-badge free"><i class="bi bi-gift"></i> SUBSCRIBED FOR FREE</div>
-          <?php elseif(isset($user['is_subscribed']) && $user['is_subscribed']): ?>
-          <div class="subscription-badge premium"><i class="bi bi-star-fill"></i> SUBSCRIBED - $<?php echo number_format($user['subscription_price'] ?? 0, 2); ?>/mo</div>
-          <?php else: ?>
-          <div class="subscription-badge" style="border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,.1)"><i class="bi bi-lock-fill"></i> NOT SUBSCRIBED</div>
+          <?php if($user['is_creator']): ?>
+          <div class="subscription-badge premium"><i class="bi bi-star-fill"></i> CONTENT CREATOR</div>
           <?php endif; ?>
         </div>
       </div>
@@ -472,46 +501,44 @@ include 'views/header.php';
   <div class="section-header" style="margin-top:3rem">
     <h2 class="section-title">
       <i class="bi bi-people-fill" style="color:var(--cyan)"></i>
-      Browse All Creators
+      Browse All Users
     </h2>
   </div>
 
   <div id="usersList">
     <?php foreach($users as $user): ?>
       <div class="user-list-item creator-item"
-           data-name="<?php echo strtolower(htmlspecialchars($user['display_name'] ?? '')); ?>" 
-           data-username="<?php echo strtolower(htmlspecialchars($user['username'] ?? '')); ?>"
-           data-online="<?php echo isset($user['is_online']) && $user['is_online'] ? '1' : '0'; ?>"
-           data-verified="<?php echo isset($user['is_verified']) && $user['is_verified'] ? '1' : '0'; ?>"
-           data-subscribed="<?php echo isset($user['is_subscribed']) && $user['is_subscribed'] ? '1' : '0'; ?>"
-           data-free="<?php echo isset($user['is_free']) && $user['is_free'] ? '1' : '0'; ?>"
+           data-name="<?php echo strtolower(e($user['display_name'])); ?>" 
+           data-username="<?php echo strtolower(e($user['username'])); ?>"
+           data-online="<?php echo $user['is_online'] ? '1' : '0'; ?>"
+           data-verified="<?php echo $user['is_verified'] ? '1' : '0'; ?>"
+           data-creator="<?php echo $user['is_creator'] ? '1' : '0'; ?>"
            onclick="window.location.href='/profile.php?id=<?php echo $user['id']; ?>'">
         <div class="user-list-avatar">
-          <img src="<?php echo htmlspecialchars($user['avatar'] ?? '/assets/img/default-avatar.png'); ?>" alt="Avatar">
-          <?php if(isset($user['is_online']) && $user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
+          <img src="<?php echo e($user['avatar']); ?>" alt="Avatar">
+          <?php if($user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
         </div>
         <div class="user-list-info">
           <div class="user-list-username">
-            <?php echo htmlspecialchars($user['display_name'] ?? 'Unknown'); ?>
-            <?php if(isset($user['is_verified']) && $user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
+            <?php echo e($user['display_name']); ?>
+            <?php if($user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
           </div>
           <div class="user-list-meta">
-            <span><i class="bi bi-at"></i> <?php echo htmlspecialchars($user['username'] ?? 'unknown'); ?></span>
+            <span><i class="bi bi-at"></i> <?php echo e($user['username']); ?></span>
             <span>• <?php 
-              if (isset($user['is_online']) && $user['is_online']) {
+              if ($user['is_online']) {
                 echo '<i class="bi bi-circle-fill" style="color:var(--green);font-size:0.5rem"></i> Online now';
-              } else if (isset($user['last_seen'])) {
+              } else if ($user['last_seen']) {
                 echo 'Last seen ' . timeAgo($user['last_seen']);
               } else {
                 echo 'Offline';
               }
             ?></span>
-            <span>• <i class="bi bi-file-post"></i> <?php echo number_format($user['post_count'] ?? 0); ?> posts</span>
           </div>
         </div>
         <div class="user-list-actions">
           <a href="/messages-compose.php?to=<?php echo $user['id']; ?>" class="user-list-btn" onclick="event.stopPropagation()"><i class="bi bi-chat"></i> Message</a>
-          <button class="user-list-btn" onclick="event.stopPropagation();toggleFollow(<?php echo $user['id']; ?>)"><i class="bi bi-star"></i></button>
+          <a href="/profile.php?id=<?php echo $user['id']; ?>" class="user-list-btn" onclick="event.stopPropagation()"><i class="bi bi-person"></i></a>
         </div>
       </div>
     <?php endforeach; ?>
@@ -603,8 +630,7 @@ include 'views/header.php';
       let matchesFilter = true;
       if (currentFilter === 'online') matchesFilter = item.dataset.online === '1';
       else if (currentFilter === 'verified') matchesFilter = item.dataset.verified === '1';
-      else if (currentFilter === 'subscribed') matchesFilter = item.dataset.subscribed === '1';
-      else if (currentFilter === 'free') matchesFilter = item.dataset.free === '1';
+      else if (currentFilter === 'creator') matchesFilter = item.dataset.creator === '1';
       
       if (matchesSearch && matchesFilter) {
         item.style.display = '';
@@ -620,9 +646,8 @@ include 'views/header.php';
   }
   
   function sortCreators() {
-    // Sorting logic would go here
-    // This is a placeholder - in a real implementation, you'd sort the items
     console.log('Sorting by:', currentSort);
+    // Implement actual sorting here if needed
   }
 })();
 </script>
