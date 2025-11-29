@@ -59,7 +59,6 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['change_avatar'])) {
     ];
     
     if($userProfile->saveProfile($_SESSION['user_id'], $data)) {
-        // Update location if provided
         if(!empty($_POST['city_id'])) {
             $city = $location->getCityById($_POST['city_id']);
             if($city) {
@@ -82,87 +81,437 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['change_avatar'])) {
 
 include 'views/header.php';
 ?>
-<div class="page-content">
-    <div class="container-narrow">
-        <div class="card">
-            <h2>Edit Profile</h2>
-            <div style="text-align:center; margin-bottom: 2rem;">
-                <div style="display:inline-block;position:relative;">
-                    <img src="<?php echo htmlspecialchars($profile['avatar'] ?? '/assets/images/default-avatar.png'); ?>" alt="Avatar" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid var(--primary-blue); background:#222;">
-                    <div style="position: absolute; bottom: -10px; right: -10px; display: flex; gap: 7px;">
-                        <?php if($profile['is_admin'] ?? false): ?>
-                            <span title="Admin" style="background:#ef4444;color:white;border-radius:50%;padding:4px 8px;font-size:1.1rem;">🛡️</span>
-                        <?php endif; ?>
-                        <?php if($profile['verified'] ?? false): ?>
-                            <span title="Verified" style="background:#3b82f6;color:white;border-radius:50%;padding:4px 8px;font-size:1.1rem;">✔️</span>
-                        <?php endif; ?>
-                        <?php if($profile['creator'] ?? false): ?>
-                            <span title="Creator" style="background:#f59e0b;color:white;border-radius:50%;padding:4px 8px;font-size:1.1rem;">⭐</span>
-                        <?php endif; ?>
-                        <?php if($profile['is_moderator'] ?? false): ?>
-                            <span title="Moderator" style="background:#06b6d4;color:white;border-radius:50%;padding:4px 8px;font-size:1.1rem;">🛡️</span>
-                        <?php endif; ?>
-                    </div>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
+
+<style>
+:root {
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-success: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+    --shadow-lg: 0 20px 60px rgba(0,0,0,0.15);
+}
+
+.edit-profile-container {
+    max-width: 1100px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+}
+
+.profile-card {
+    background: var(--card-bg, #fff);
+    border-radius: 24px;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+
+.profile-header-section {
+    background: var(--gradient-primary);
+    padding: 3rem 2rem;
+    text-align: center;
+    position: relative;
+}
+
+.avatar-upload-wrapper {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 1.5rem;
+}
+
+.avatar-preview {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid rgba(255,255,255,0.3);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    transition: all 0.3s;
+}
+
+.avatar-preview:hover {
+    transform: scale(1.05);
+    border-color: rgba(255,255,255,0.5);
+}
+
+.badge-container {
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    display: flex;
+    gap: 5px;
+}
+
+.profile-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border: 2px solid white;
+}
+
+.avatar-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.form-section {
+    padding: 2rem;
+}
+
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: var(--text, #1a202c);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-title i {
+    font-size: 1.75rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.form-control, .form-select, .form-check-input {
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102,126,234,0.1);
+}
+
+.chip-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.chip {
+    background: #e2e8f0;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 2px solid transparent;
+}
+
+.chip:hover {
+    background: #cbd5e0;
+    transform: translateY(-2px);
+}
+
+.chip.active {
+    background: var(--gradient-primary);
+    color: white;
+    border-color: #667eea;
+}
+
+.save-actions {
+    display: flex;
+    gap: 1rem;
+    padding: 2rem;
+    background: #f7fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+    .save-actions {
+        flex-direction: column;
+    }
+}
+</style>
+
+<div class="edit-profile-container">
+    <!-- Header with Avatar -->
+    <div class="profile-card">
+        <div class="profile-header-section">
+            <div class="avatar-upload-wrapper">
+                <img src="<?php echo htmlspecialchars($profile['avatar'] ?? '/assets/images/default-avatar.png'); ?>" 
+                     alt="Avatar" 
+                     class="avatar-preview" 
+                     id="avatarPreview">
+                <div class="badge-container">
+                    <?php if($profile['is_admin'] ?? false): ?>
+                        <span class="profile-badge" style="background:#ef4444" title="Admin">🛡️</span>
+                    <?php endif; ?>
+                    <?php if($profile['verified'] ?? false): ?>
+                        <span class="profile-badge" style="background:#3b82f6" title="Verified">✓</span>
+                    <?php endif; ?>
+                    <?php if($profile['creator'] ?? false): ?>
+                        <span class="profile-badge" style="background:#f59e0b" title="Creator">⭐</span>
+                    <?php endif; ?>
                 </div>
-                <form method="POST" action="edit-profile.php" enctype="multipart/form-data" style="margin-top:10px;">
-                    <label for="avatar" style="display:inline-block;cursor:pointer;">
-                        <span class="btn-secondary">Change Photo</span>
-                        <input type="file" name="avatar" id="avatar" style="display:none;" accept="image/png, image/jpeg">
+            </div>
+            
+            <form method="POST" enctype="multipart/form-data" id="avatarForm">
+                <div class="avatar-actions">
+                    <label for="avatarInput" class="btn btn-light btn-sm">
+                        <i class="bi bi-camera"></i> Change Photo
                     </label>
+                    <input type="file" name="avatar" id="avatarInput" class="d-none" accept="image/png,image/jpeg">
+                    
                     <?php if(!empty($profile['avatar'])): ?>
-                        <button type="submit" name="remove_avatar" class="btn-danger" style="margin-left:10px;">Remove</button>
+                        <button type="submit" name="remove_avatar" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash"></i> Remove
+                        </button>
                     <?php endif; ?>
                     <input type="hidden" name="change_avatar" value="1">
-                </form>
-                <small style="color:var(--text-gray);display:block;margin-top:0.5rem;">JPEG or PNG up to 2MB.</small>
-            </div>
-
-            <?php if($success): ?>
-            <div class="alert alert-success"><?php echo $success; ?></div>
-            <?php endif; ?>
-            
-            <?php if($error): ?>
-            <div class="alert alert-error"><?php echo $error; ?></div>
-            <?php endif; ?>
-            
-            <form method="POST" action="edit-profile.php">
-                <!-- ... keep all of your previous form fields here ... -->
-                <!-- (insert your existing code for Bio, Physical, Lifestyle, etc.) -->
-                <!-- for brevity, not copied again here but keep as-is! -->
-
-                <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                    <button type="submit" class="btn-primary" style="flex: 1;">Save Profile</button>
-                    <a href="profile.php?id=<?php echo $_SESSION['user_id']; ?>" class="btn-secondary" style="flex: 1; text-align: center;">Cancel</a>
                 </div>
+                <small class="text-white-50 d-block mt-2">JPEG or PNG up to 2MB</small>
             </form>
         </div>
+        
+        <?php if($success): ?>
+        <div class="alert alert-success m-3">
+            <i class="bi bi-check-circle"></i> <?php echo htmlspecialchars($success); ?>
+        </div>
+        <?php endif; ?>
+        
+        <?php if($error): ?>
+        <div class="alert alert-danger m-3">
+            <i class="bi bi-exclamation-triangle"></i> <?php echo htmlspecialchars($error); ?>
+        </div>
+        <?php endif; ?>
+        
+        <form method="POST" id="profileForm">
+            <!-- About Me Section -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <i class="bi bi-person-lines-fill"></i>
+                    About Me
+                </h3>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Bio</label>
+                    <textarea name="bio" class="form-control" rows="5" 
+                              placeholder="Tell others about yourself..."><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
+                    <div class="form-text">Share your interests, hobbies, and what makes you unique</div>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Occupation</label>
+                        <input type="text" name="occupation" class="form-control" 
+                               value="<?php echo htmlspecialchars($profile['occupation'] ?? ''); ?>"
+                               placeholder="Your profession">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Education</label>
+                        <select name="education" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="high_school" <?php echo ($profile['education'] ?? '') == 'high_school' ? 'selected' : ''; ?>>High School</option>
+                            <option value="some_college" <?php echo ($profile['education'] ?? '') == 'some_college' ? 'selected' : ''; ?>>Some College</option>
+                            <option value="bachelors" <?php echo ($profile['education'] ?? '') == 'bachelors' ? 'selected' : ''; ?>>Bachelor's Degree</option>
+                            <option value="masters" <?php echo ($profile['education'] ?? '') == 'masters' ? 'selected' : ''; ?>>Master's Degree</option>
+                            <option value="phd" <?php echo ($profile['education'] ?? '') == 'phd' ? 'selected' : ''; ?>>PhD</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="m-0">
+            
+            <!-- Physical Attributes -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <i class="bi bi-rulers"></i>
+                    Physical Attributes
+                </h3>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Height (cm)</label>
+                        <input type="number" name="height" class="form-control" 
+                               value="<?php echo htmlspecialchars($profile['height'] ?? ''); ?>"
+                               placeholder="170">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Body Type</label>
+                        <select name="body_type" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="slim" <?php echo ($profile['body_type'] ?? '') == 'slim' ? 'selected' : ''; ?>>Slim</option>
+                            <option value="athletic" <?php echo ($profile['body_type'] ?? '') == 'athletic' ? 'selected' : ''; ?>>Athletic</option>
+                            <option value="average" <?php echo ($profile['body_type'] ?? '') == 'average' ? 'selected' : ''; ?>>Average</option>
+                            <option value="curvy" <?php echo ($profile['body_type'] ?? '') == 'curvy' ? 'selected' : ''; ?>>Curvy</option>
+                            <option value="muscular" <?php echo ($profile['body_type'] ?? '') == 'muscular' ? 'selected' : ''; ?>>Muscular</option>
+                            <option value="heavyset" <?php echo ($profile['body_type'] ?? '') == 'heavyset' ? 'selected' : ''; ?>>Heavyset</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Ethnicity</label>
+                        <input type="text" name="ethnicity" class="form-control" 
+                               value="<?php echo htmlspecialchars($profile['ethnicity'] ?? ''); ?>"
+                               placeholder="Your ethnicity">
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="m-0">
+            
+            <!-- Lifestyle -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <i class="bi bi-hearts"></i>
+                    Lifestyle & Preferences
+                </h3>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Relationship Status</label>
+                        <select name="relationship_status" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="single" <?php echo ($profile['relationship_status'] ?? '') == 'single' ? 'selected' : ''; ?>>Single</option>
+                            <option value="dating" <?php echo ($profile['relationship_status'] ?? '') == 'dating' ? 'selected' : ''; ?>>Dating</option>
+                            <option value="relationship" <?php echo ($profile['relationship_status'] ?? '') == 'relationship' ? 'selected' : ''; ?>>In a Relationship</option>
+                            <option value="married" <?php echo ($profile['relationship_status'] ?? '') == 'married' ? 'selected' : ''; ?>>Married</option>
+                            <option value="divorced" <?php echo ($profile['relationship_status'] ?? '') == 'divorced' ? 'selected' : ''; ?>>Divorced</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Looking For</label>
+                        <select name="looking_for[]" class="form-select" multiple size="3">
+                            <option value="friendship">Friendship</option>
+                            <option value="dating">Dating</option>
+                            <option value="relationship">Relationship</option>
+                            <option value="casual">Casual</option>
+                        </select>
+                        <div class="form-text">Hold Ctrl/Cmd to select multiple</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Smoking</label>
+                        <select name="smoking" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="never" <?php echo ($profile['smoking'] ?? '') == 'never' ? 'selected' : ''; ?>>Never</option>
+                            <option value="occasionally" <?php echo ($profile['smoking'] ?? '') == 'occasionally' ? 'selected' : ''; ?>>Occasionally</option>
+                            <option value="regularly" <?php echo ($profile['smoking'] ?? '') == 'regularly' ? 'selected' : ''; ?>>Regularly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Drinking</label>
+                        <select name="drinking" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="never" <?php echo ($profile['drinking'] ?? '') == 'never' ? 'selected' : ''; ?>>Never</option>
+                            <option value="socially" <?php echo ($profile['drinking'] ?? '') == 'socially' ? 'selected' : ''; ?>>Socially</option>
+                            <option value="regularly" <?php echo ($profile['drinking'] ?? '') == 'regularly' ? 'selected' : ''; ?>>Regularly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Want Kids?</label>
+                        <select name="wants_kids" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="yes" <?php echo ($profile['wants_kids'] ?? '') == 'yes' ? 'selected' : ''; ?>>Yes</option>
+                            <option value="no" <?php echo ($profile['wants_kids'] ?? '') == 'no' ? 'selected' : ''; ?>>No</option>
+                            <option value="maybe" <?php echo ($profile['wants_kids'] ?? '') == 'maybe' ? 'selected' : ''; ?>>Maybe</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <div class="form-check">
+                        <input type="checkbox" name="has_kids" class="form-check-input" id="hasKids" 
+                               <?php echo ($profile['has_kids'] ?? false) ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="hasKids">I have children</label>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="m-0">
+            
+            <!-- Interests -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <i class="bi bi-star"></i>
+                    Interests & Hobbies
+                </h3>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Interests</label>
+                    <input type="text" name="interests" class="form-control" 
+                           placeholder="Travel, Music, Sports, Cooking..." 
+                           value="<?php echo htmlspecialchars(is_array($profile['interests'] ?? null) ? implode(', ', $profile['interests']) : ''); ?>">
+                    <div class="form-text">Separate with commas</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Languages</label>
+                    <input type="text" name="languages" class="form-control" 
+                           placeholder="English, Spanish, French..." 
+                           value="<?php echo htmlspecialchars(is_array($profile['languages'] ?? null) ? implode(', ', $profile['languages']) : ''); ?>">
+                    <div class="form-text">Separate with commas</div>
+                </div>
+            </div>
+            
+            <hr class="m-0">
+            
+            <!-- Privacy Settings -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <i class="bi bi-shield-lock"></i>
+                    Privacy Settings
+                </h3>
+                <div class="form-check mb-3">
+                    <input type="checkbox" name="show_online_status" class="form-check-input" id="showOnline" 
+                           <?php echo ($profile['show_online_status'] ?? true) ? 'checked' : ''; ?>>
+                    <label class="form-check-label" for="showOnline">
+                        Show when I'm online
+                    </label>
+                </div>
+                <div class="form-check mb-3">
+                    <input type="checkbox" name="show_age" class="form-check-input" id="showAge" 
+                           <?php echo ($profile['show_age'] ?? true) ? 'checked' : ''; ?>>
+                    <label class="form-check-label" for="showAge">
+                        Display my age
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" name="display_distance" class="form-check-input" id="showDistance" 
+                           <?php echo ($profile['display_distance'] ?? true) ? 'checked' : ''; ?>>
+                    <label class="form-check-label" for="showDistance">
+                        Show distance to other users
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="save-actions">
+                <button type="submit" class="btn btn-primary btn-lg flex-fill">
+                    <i class="bi bi-check-circle"></i> Save Changes
+                </button>
+                <a href="profile.php?id=<?php echo $_SESSION['user_id']; ?>" class="btn btn-outline-secondary btn-lg flex-fill">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </a>
+            </div>
+        </form>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-document.getElementById('stateSelect').addEventListener('change', function() {
-    const stateId = this.value;
-    const citySelect = document.getElementById('citySelect');
-    
-    if(!stateId) {
-        citySelect.innerHTML = '<option value="">Select State First</option>';
-        return;
+// Avatar preview
+document.getElementById('avatarInput')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('avatarPreview').src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+        // Auto-submit avatar form
+        document.getElementById('avatarForm').submit();
     }
-    
-    fetch('get-cities.php?state_id=' + stateId)
-        .then(response => response.json())
-        .then(cities => {
-            citySelect.innerHTML = '<option value="">Select City</option>';
-            cities.forEach(city => {
-                const option = document.createElement('option');
-                option.value = city.id;
-                option.textContent = city.name;
-                citySelect.appendChild(option);
-            });
-        })
-        .catch(error => {
-            console.error('Error fetching cities:', error);
-        });
 });
 </script>
+
 <?php include 'views/footer.php'; ?>
