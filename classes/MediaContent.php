@@ -228,6 +228,64 @@ class MediaContent {
     }
     
     /**
+     * Get content count for pagination
+     */
+    public function getContentCount($filters = []) {
+        $query = "SELECT COUNT(*) as total
+                  FROM media_content c
+                  JOIN users u ON u.id = c.creator_id
+                  WHERE c.status = 'published'";
+        
+        if(!empty($filters['creator_id'])) {
+            $query .= " AND c.creator_id = :creator_id";
+        }
+        
+        if(!empty($filters['content_type'])) {
+            $query .= " AND c.content_type = :content_type";
+        }
+        
+        if(!empty($filters['is_free'])) {
+            $query .= " AND c.is_free = 1";
+        }
+        
+        if(!empty($filters['min_price'])) {
+            $query .= " AND c.price >= :min_price";
+        }
+        
+        if(!empty($filters['max_price'])) {
+            $query .= " AND c.price <= :max_price";
+        }
+        
+        if(!empty($filters['search'])) {
+            $query .= " AND (c.title LIKE :search OR c.description LIKE :search OR u.username LIKE :search)";
+        }
+        
+        $stmt = $this->db->prepare($query);
+        
+        if(!empty($filters['creator_id'])) {
+            $stmt->bindParam(':creator_id', $filters['creator_id']);
+        }
+        if(!empty($filters['content_type'])) {
+            $stmt->bindParam(':content_type', $filters['content_type']);
+        }
+        if(!empty($filters['min_price'])) {
+            $stmt->bindParam(':min_price', $filters['min_price']);
+        }
+        if(!empty($filters['max_price'])) {
+            $stmt->bindParam(':max_price', $filters['max_price']);
+        }
+        if(!empty($filters['search'])) {
+            $search_term = '%' . $filters['search'] . '%';
+            $stmt->bindParam(':search', $search_term);
+        }
+        
+        $stmt->execute();
+        $result = $stmt->fetch();
+        
+        return $result['total'] ?? 0;
+    }
+    
+    /**
      * Browse all content (marketplace)
      */
     public function browseContent($filters = [], $page = 1, $per_page = 20) {
@@ -253,8 +311,16 @@ class MediaContent {
             $query .= " AND c.is_free = 1";
         }
         
+        if(!empty($filters['min_price'])) {
+            $query .= " AND c.price >= :min_price";
+        }
+        
         if(!empty($filters['max_price'])) {
             $query .= " AND c.price <= :max_price";
+        }
+        
+        if(!empty($filters['search'])) {
+            $query .= " AND (c.title LIKE :search OR c.description LIKE :search OR u.username LIKE :search)";
         }
         
         $query .= " ORDER BY c.published_at DESC LIMIT :limit OFFSET :offset";
@@ -267,8 +333,15 @@ class MediaContent {
         if(!empty($filters['content_type'])) {
             $stmt->bindParam(':content_type', $filters['content_type']);
         }
+        if(!empty($filters['min_price'])) {
+            $stmt->bindParam(':min_price', $filters['min_price']);
+        }
         if(!empty($filters['max_price'])) {
             $stmt->bindParam(':max_price', $filters['max_price']);
+        }
+        if(!empty($filters['search'])) {
+            $search_term = '%' . $filters['search'] . '%';
+            $stmt->bindParam(':search', $search_term);
         }
         
         $stmt->bindParam(':limit', $per_page, PDO::PARAM_INT);
