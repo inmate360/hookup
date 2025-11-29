@@ -13,6 +13,17 @@ if(checkMaintenanceMode($db)) {
     exit();
 }
 
+// Check if current user is a creator
+$is_creator = false;
+if(isset($_SESSION['user_id'])) {
+    $check_query = "SELECT creator FROM users WHERE id = :user_id";
+    $stmt = $db->prepare($check_query);
+    $stmt->bindParam(':user_id', $_SESSION['user_id']);
+    $stmt->execute();
+    $user_data = $stmt->fetch();
+    $is_creator = ($user_data && $user_data['creator'] == 1);
+}
+
 // Initialize arrays
 $featured_creators = [];
 $users = [];
@@ -128,7 +139,61 @@ include 'views/header.php';
   font-size: 1.2rem;
   color: rgba(255, 255, 255, 0.9);
   max-width: 600px;
-  margin: 0 auto;
+  margin: 0 auto 1.5rem;
+}
+
+.creator-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #fff;
+  color: #4267f5;
+  padding: 1rem 2rem;
+  border-radius: 50px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-decoration: none;
+  transition: all 0.3s;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.creator-cta:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+  color: #4267f5;
+}
+
+.creator-cta i {
+  font-size: 1.3rem;
+}
+
+.creator-nav {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.creator-nav-link {
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 25px;
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.creator-nav-link:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: #fff;
+  transform: translateY(-2px);
+  color: #fff;
 }
 
 .search-filter-section {
@@ -364,6 +429,9 @@ include 'views/header.php';
 @media (max-width: 768px) {
   .marketplace-hero h1 { font-size: 2rem; }
   .marketplace-hero p { font-size: 1rem; }
+  .creator-cta { font-size: 1rem; padding: 0.875rem 1.75rem; }
+  .creator-nav { flex-direction: column; }
+  .creator-nav-link { justify-content: center; }
   .search-filter-section { padding: 1.5rem; }
   .filter-chips { gap: 0.75rem; }
   .filter-chip { padding: 0.6rem 1.2rem; font-size: 0.9rem; }
@@ -381,6 +449,38 @@ include 'views/header.php';
   <div class="marketplace-hero">
     <h1><i class="bi bi-shop"></i> Creator Marketplace</h1>
     <p>Discover and connect with amazing creators. Subscribe, message, and support your favorites.</p>
+    
+    <?php if(isset($_SESSION['user_id'])): ?>
+      <?php if($is_creator): ?>
+        <!-- Creator Navigation -->
+        <div class="creator-nav">
+          <a href="/creator-dashboard.php" class="creator-nav-link">
+            <i class="bi bi-grid-3x3"></i> Dashboard
+          </a>
+          <a href="/upload-content.php" class="creator-nav-link">
+            <i class="bi bi-cloud-upload"></i> Upload
+          </a>
+          <a href="/creator-settings.php" class="creator-nav-link">
+            <i class="bi bi-gear"></i> Settings
+          </a>
+          <a href="/withdraw-earnings.php" class="creator-nav-link">
+            <i class="bi bi-wallet2"></i> Earnings
+          </a>
+        </div>
+      <?php else: ?>
+        <!-- Become Creator CTA -->
+        <a href="/become-creator.php" class="creator-cta">
+          <i class="bi bi-star-fill"></i>
+          Become a Creator
+        </a>
+      <?php endif; ?>
+    <?php else: ?>
+      <!-- Not logged in -->
+      <a href="/login.php" class="creator-cta">
+        <i class="bi bi-person-circle"></i>
+        Login to Start Creating
+      </a>
+    <?php endif; ?>
   </div>
 
   <!-- Stats Bar -->
@@ -647,7 +747,6 @@ include 'views/header.php';
   
   function sortCreators() {
     console.log('Sorting by:', currentSort);
-    // Implement actual sorting here if needed
   }
 })();
 </script>
