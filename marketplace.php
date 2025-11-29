@@ -8,8 +8,7 @@ $database = new Database();
 $db = $database->getConnection();
 $mediaContent = new MediaContent($db);
 
-// Get filters
-$page = (int)($_GET['page'] ?? 1);
+$page = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 24;
 $content_type = $_GET['type'] ?? '';
 $sort = $_GET['sort'] ?? 'newest';
@@ -17,6 +16,7 @@ $search = $_GET['search'] ?? '';
 $min_price = isset($_GET['min_price']) ? (int)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (int)$_GET['max_price'] : null;
 $view_mode = $_GET['view'] ?? 'grid';
+$enable_infinite_scroll = true;
 
 $filters = [];
 if($content_type) $filters['content_type'] = $content_type;
@@ -24,14 +24,28 @@ if($search) $filters['search'] = $search;
 if($min_price !== null) $filters['min_price'] = $min_price;
 if($max_price !== null) $filters['max_price'] = $max_price;
 
+if(isset($_GET['ajax']) && $_GET['ajax'] === '1') {
+    header('Content-Type: application/json');
+    $content_items = $mediaContent->browseContent($filters, $page, $per_page);
+    $total_items = $mediaContent->getContentCount($filters);
+    $total_pages = max(1, ceil($total_items / $per_page));
+    echo json_encode([
+        'items' => $content_items,
+        'next_page' => ($page < $total_pages) ? $page + 1 : null,
+        'has_more' => $page < $total_pages
+    ]);
+    exit;
+}
+
 $content_items = $mediaContent->browseContent($filters, $page, $per_page);
+$total_items = $mediaContent->getContentCount($filters);
+$total_pages = max(1, ceil($total_items / $per_page));
 
 $coin_balance = 0;
 $user_wishlist = [];
 if(isset($_SESSION['user_id'])) {
     $coinsSystem = new CoinsSystem($db);
     $coin_balance = $coinsSystem->getBalance($_SESSION['user_id']);
-    
     try {
         $w_query = "SELECT content_id FROM content_wishlist WHERE user_id = :user_id";
         $w_stmt = $db->prepare($w_query);
@@ -72,6 +86,9 @@ include 'views/header.php';
 .wishlist-btn{position:absolute;top:1rem;right:1rem;background:rgba(0,0,0,.8);backdrop-filter:blur(10px);border:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;transition:all .3s;color:#fff}
 .wishlist-btn:hover{transform:scale(1.1)}.wishlist-btn.active{color:var(--red)}.info{padding:1.5rem}.title{font-weight:700;font-size:1.1rem;margin-bottom:.75rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .stats{display:flex;gap:1.5rem;color:var(--gray);font-size:.9rem;margin-top:1rem}.stats-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+.pagination{display:flex;justify-content:center;gap:.5rem;margin:3rem 0;flex-wrap:wrap}.pagination a,.pagination span{padding:.75rem 1.25rem;background:var(--bg-card);border:2px solid var(--border);border-radius:10px;color:var(--text);text-decoration:none;transition:all .3s}
+.pagination a:hover,.pagination span.active{background:var(--blue);border-color:var(--blue)}.pagination span.disabled{opacity:.5;cursor:not-allowed}
+#load-more-container{text-align:center;margin:3rem 0}#load-more-btn{background:var(--blue);color:#fff;border:none;padding:1rem 3rem;border-radius:50px;font-weight:600;font-size:1rem;cursor:pointer;transition:all .3s}#load-more-btn:hover{background:#3451d9;transform:translateY(-2px)}
 @media(max-width:768px){.content-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem}.filter-row{grid-template-columns:1fr}}
 </style>
 
@@ -87,26 +104,61 @@ include 'views/header.php';
 <div class="filter-grp"><label>Sort By</label><select name="sort"><option value="newest" <?php echo $sort==='newest'?'selected':'';?>>Newest First</option><option value="popular" <?php echo $sort==='popular'?'selected':'';?>>Most Popular</option><option value="price_low" <?php echo $sort==='price_low'?'selected':'';?>>Price: Low to High</option><option value="price_high" <?php echo $sort==='price_high'?'selected':'';?>>Price: High to Low</option></select></div></div>
 <div style="display:flex;gap:1rem;margin-top:1.5rem"><button type="submit" style="background:var(--blue);color:#fff;padding:.75rem 2rem;border:none;border-radius:10px;font-weight:600;cursor:pointer">Apply Filters</button><a href="marketplace.php" style="background:var(--bg-card);color:var(--text);padding:.75rem 2rem;border:2px solid var(--border);border-radius:10px;font-weight:600;text-decoration:none;display:inline-block">Clear All</a></div></form></div>
 
-<div class="stats-bar"><div style="color:var(--gray)">Showing <strong style="color:var(--text)"><?php echo count($content_items);?></strong> items</div>
+<div class="stats-bar"><div style="color:var(--gray)">Showing <strong style="color:var(--text)"><?php echo count($content_items);?></strong> of <strong style="color:var(--text)"><?php echo number_format($total_items);?></strong> items</div>
 <div class="view-toggle"><button class="<?php echo $view_mode==='grid'?'active':'';?>" onclick="changeView('grid')"><i class="bi bi-grid-3x3"></i> Grid</button><button class="<?php echo $view_mode==='list'?'active':'';?>" onclick="changeView('list')"><i class="bi bi-list"></i> List</button></div></div>
 
 <?php if(empty($content_items)):?>
 <div style="background:var(--bg-card);border:2px solid var(--border);border-radius:20px;padding:4rem 2rem;text-align:center;margin-top:2rem"><div style="font-size:5rem;margin-bottom:1rem;opacity:.3">🔍</div><h3 style="font-size:1.5rem;margin-bottom:1rem">No content found</h3><p style="color:var(--gray);margin-bottom:1.5rem">Try adjusting your filters or search terms</p><a href="marketplace.php" style="background:var(--blue);color:#fff;padding:.75rem 2rem;border-radius:10px;font-weight:600;text-decoration:none;display:inline-block">View All Content</a></div>
 <?php else:?>
-<div class="content-<?php echo $view_mode;?>">
+<div id="marketplace-grid" class="content-<?php echo $view_mode;?>">
 <?php foreach($content_items as $item):?>
 <div class="card" onclick="window.location.href='/view-content.php?id=<?php echo $item['id'];?>'"><div class="thumb-wrap">
 <div class="creator"><div class="avatar"><?php echo strtoupper(substr($item['creator_name']??'U',0,1));?></div><span style="color:#fff;font-weight:600;font-size:.9rem"><?php echo htmlspecialchars($item['creator_name']??'Unknown');?></span><?php if($item['is_verified']??false):?><span style="color:#3b82f6">✓</span><?php endif;?></div>
 <?php if(isset($_SESSION['user_id'])):?><button class="wishlist-btn <?php echo in_array($item['id'],$user_wishlist)?'active':'';?>" onclick="event.stopPropagation();toggleWishlist(<?php echo $item['id'];?>,this)"><i class="bi bi-heart<?php echo in_array($item['id'],$user_wishlist)?'-fill':'';?>"></i></button><?php endif;?>
-<?php if($item['thumbnail']??false):?><img src="<?php echo htmlspecialchars($item['thumbnail']);?>" class="thumb <?php echo($item['blur_preview']??false)?'blur':'';?>" alt="Content"><?php else:?><div class="thumb" style="background:linear-gradient(135deg,#4267f5,#1d9bf0);display:flex;align-items:center;justify-content:center;font-size:5rem"><?php echo($item['content_type']??'')==='video'?'🎥':'📷';?></div><?php endif;?>
+<?php if($item['thumbnail']??false):?><img src="<?php echo htmlspecialchars($item['thumbnail']);?>" loading="lazy" class="thumb <?php echo($item['blur_preview']??false)?'blur':'';?>" alt="Content"><?php else:?><div class="thumb" style="background:linear-gradient(135deg,#4267f5,#1d9bf0);display:flex;align-items:center;justify-content:center;font-size:5rem"><?php echo($item['content_type']??'')==='video'?'🎥':'📷';?></div><?php endif;?>
 <?php if(!($item['is_free']??true)):?><div class="lock"><div style="font-size:3rem;margin-bottom:1rem">🔒</div><div class="price">💰 <?php echo number_format($item['price']??0);?> coins</div></div><?php else:?><div style="position:absolute;bottom:1rem;right:1rem;background:var(--green);color:#fff;padding:.5rem 1rem;border-radius:20px;font-weight:700;font-size:.9rem">FREE</div><?php endif;?></div>
 <div class="info"><div class="title"><?php echo htmlspecialchars($item['title']??'Untitled');?></div><?php if($item['description']??false):?><p style="color:var(--gray);font-size:.9rem;margin-bottom:1rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"><?php echo htmlspecialchars($item['description']);?></p><?php endif;?>
 <div class="stats"><span><i class="bi bi-eye"></i> <?php echo number_format($item['view_count']??0);?></span><span><i class="bi bi-heart"></i> <?php echo number_format($item['like_count']??0);?></span><span><i class="bi bi-cart"></i> <?php echo number_format($item['purchase_count']??0);?></span></div></div></div>
-<?php endforeach;?></div><?php endif;?></div>
+<?php endforeach;?></div>
+
+<?php if($total_pages > 1):?>
+<div id="load-more-container"><?php if($page < $total_pages):?><button id="load-more-btn" data-next-page="<?php echo $page + 1;?>">Load More</button><?php endif;?></div>
+<nav class="pagination">
+<?php
+$query = $_GET;
+if($page > 1){
+    $query['page'] = $page - 1;
+    echo '<a href="?' . http_build_query($query) . '"><i class="bi bi-chevron-left"></i> Prev</a>';
+} else {
+    echo '<span class="disabled"><i class="bi bi-chevron-left"></i> Prev</span>';
+}
+$start = max(1, $page - 2);
+$end = min($total_pages, $page + 2);
+for($p = $start; $p <= $end; $p++){
+    $query['page'] = $p;
+    if($p == $page) {
+        echo '<span class="active">' . $p . '</span>';
+    } else {
+        echo '<a href="?' . http_build_query($query) . '">' . $p . '</a>';
+    }
+}
+if($page < $total_pages){
+    $query['page'] = $page + 1;
+    echo '<a href="?' . http_build_query($query) . '">Next <i class="bi bi-chevron-right"></i></a>';
+} else {
+    echo '<span class="disabled">Next <i class="bi bi-chevron-right"></i></span>';
+}
+?>
+</nav>
+<?php endif;?>
+<?php endif;?></div>
 
 <script>
 function changeView(mode){const url=new URL(window.location);url.searchParams.set('view',mode);window.location=url}
 function toggleWishlist(contentId,button){fetch('/api/wishlist.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content_id:contentId,action:'toggle'})}).then(r=>r.json()).then(data=>{if(data.success){button.classList.toggle('active');const icon=button.querySelector('i');icon.className=button.classList.contains('active')?'bi bi-heart-fill':'bi bi-heart'}}).catch(e=>console.error('Error:',e))}
+const grid=document.getElementById('marketplace-grid');const loadBtn=document.getElementById('load-more-btn');
+async function loadMore(p){const url=new URL(window.location.href);url.searchParams.set('page',p);url.searchParams.set('ajax','1');const res=await fetch(url.toString());const data=await res.json();data.items.forEach(item=>{const card=document.createElement('div');card.className='card';card.onclick=()=>window.location.href='/view-content.php?id='+item.id;card.innerHTML=`<div class="thumb-wrap"><div class="creator"><div class="avatar">${item.creator_name?item.creator_name.charAt(0).toUpperCase():'U'}</div><span style="color:#fff;font-weight:600;font-size:.9rem">${item.creator_name||'Unknown'}</span>${item.is_verified?'<span style="color:#3b82f6">✓</span>':''}</div>${item.thumbnail?`<img src="${item.thumbnail}" loading="lazy" class="thumb${item.blur_preview?' blur':''}" alt="Content">`:`<div class="thumb" style="background:linear-gradient(135deg,#4267f5,#1d9bf0);display:flex;align-items:center;justify-content:center;font-size:5rem">${item.content_type==='video'?'🎥':'📷'}</div>`}${!item.is_free?`<div class="lock"><div style="font-size:3rem;margin-bottom:1rem">🔒</div><div class="price">💰 ${item.price||0} coins</div></div>`:'<div style="position:absolute;bottom:1rem;right:1rem;background:var(--green);color:#fff;padding:.5rem 1rem;border-radius:20px;font-weight:700;font-size:.9rem">FREE</div>'}</div><div class="info"><div class="title">${item.title||'Untitled'}</div><div class="stats"><span><i class="bi bi-eye"></i> ${item.view_count||0}</span><span><i class="bi bi-heart"></i> ${item.like_count||0}</span><span><i class="bi bi-cart"></i> ${item.purchase_count||0}</span></div></div>`;grid.appendChild(card)});if(!data.has_more&&loadBtn)loadBtn.remove();else if(loadBtn)loadBtn.dataset.nextPage=data.next_page}
+if(loadBtn){loadBtn.addEventListener('click',()=>{const next=loadBtn.dataset.nextPage;if(next)loadMore(next)});const INFINITE=<?php echo $enable_infinite_scroll?'true':'false';?>;if(INFINITE&&'IntersectionObserver'in window){const obs=new IntersectionObserver(e=>{e.forEach(en=>{if(en.isIntersecting){const next=loadBtn.dataset.nextPage;if(next)loadMore(next)}})},{rootMargin:'200px'});obs.observe(loadBtn)}}
 </script>
 
 <?php include 'views/footer.php';?>
