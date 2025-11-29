@@ -1,5 +1,25 @@
 <?php
-// ...[rest of marketplace.php code above remains unchanged]...
+require_once 'config/database.php';
+require_once 'includes/functions.php';
+
+session_start();
+
+// Initialize variables with empty arrays if not set
+$featured_creators = [];
+$users = [];
+
+// Add your database query logic here to populate $featured_creators and $users
+// Example:
+// $featured_creators = getFeaturedCreators($db);
+// $users = getAllUsers($db);
+
+// Ensure variables are arrays
+if (!is_array($featured_creators)) {
+    $featured_creators = [];
+}
+if (!is_array($users)) {
+    $users = [];
+}
 
 include 'views/header.php';
 ?>
@@ -332,7 +352,13 @@ include 'views/header.php';
       <div class="stat-label">Total Creators</div>
     </div>
     <div class="stat-box">
-      <div class="stat-value"><?php echo count(array_filter(array_merge($featured_creators, $users), fn($u) => $u['is_online'])); ?></div>
+      <div class="stat-value"><?php 
+        $all_users = array_merge($featured_creators, $users);
+        $online_count = count(array_filter($all_users, function($u) { 
+          return isset($u['is_online']) && $u['is_online']; 
+        }));
+        echo $online_count;
+      ?></div>
       <div class="stat-label">Online Now</div>
     </div>
     <div class="stat-box">
@@ -378,6 +404,7 @@ include 'views/header.php';
     </div>
   </div>
 
+  <?php if (count($featured_creators) > 0): ?>
   <!-- Featured Creators Section -->
   <div class="section-header">
     <h2 class="section-title">
@@ -393,44 +420,44 @@ include 'views/header.php';
   <div class="creator-grid" id="featuredGrid">
     <?php foreach($featured_creators as $user): ?>
       <div class="subscription-card creator-item" 
-           data-name="<?php echo strtolower(htmlspecialchars($user['display_name'])); ?>" 
-           data-username="<?php echo strtolower(htmlspecialchars($user['username'])); ?>"
-           data-online="<?php echo $user['is_online'] ? '1' : '0'; ?>"
-           data-verified="<?php echo $user['is_verified'] ? '1' : '0'; ?>"
-           data-subscribed="<?php echo $user['is_subscribed'] ? '1' : '0'; ?>"
-           data-free="<?php echo $user['is_free'] ? '1' : '0'; ?>"
+           data-name="<?php echo strtolower(htmlspecialchars($user['display_name'] ?? '')); ?>" 
+           data-username="<?php echo strtolower(htmlspecialchars($user['username'] ?? '')); ?>"
+           data-online="<?php echo isset($user['is_online']) && $user['is_online'] ? '1' : '0'; ?>"
+           data-verified="<?php echo isset($user['is_verified']) && $user['is_verified'] ? '1' : '0'; ?>"
+           data-subscribed="<?php echo isset($user['is_subscribed']) && $user['is_subscribed'] ? '1' : '0'; ?>"
+           data-free="<?php echo isset($user['is_free']) && $user['is_free'] ? '1' : '0'; ?>"
            onclick="window.location.href='/profile.php?id=<?php echo $user['id']; ?>'">
         <div class="subscription-cover">
-          <?php if($user['cover_image']): ?>
+          <?php if(isset($user['cover_image']) && $user['cover_image']): ?>
             <img src="<?php echo htmlspecialchars($user['cover_image']); ?>" alt="Cover">
           <?php endif; ?>
           <div class="subscription-status">
-            <?php echo $user['is_online'] ? '<i class="bi bi-circle-fill" style="font-size:0.6rem;color:var(--green)"></i> Available now' : '<i class="bi bi-circle" style="font-size:0.6rem"></i> Offline'; ?>
+            <?php echo (isset($user['is_online']) && $user['is_online']) ? '<i class="bi bi-circle-fill" style="font-size:0.6rem;color:var(--green)"></i> Available now' : '<i class="bi bi-circle" style="font-size:0.6rem"></i> Offline'; ?>
           </div>
         </div>
         <div class="subscription-body">
           <div class="subscription-avatar-wrapper">
             <div class="subscription-avatar">
-              <img src="<?php echo htmlspecialchars($user['avatar']); ?>" alt="Avatar">
+              <img src="<?php echo htmlspecialchars($user['avatar'] ?? '/assets/img/default-avatar.png'); ?>" alt="Avatar">
             </div>
-            <?php if($user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
-            <?php if($user['is_verified']): ?><div class="verification-badge"><i class="bi bi-check"></i></div><?php endif; ?>
+            <?php if(isset($user['is_online']) && $user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
+            <?php if(isset($user['is_verified']) && $user['is_verified']): ?><div class="verification-badge"><i class="bi bi-check"></i></div><?php endif; ?>
           </div>
           <div class="subscription-info">
             <div class="subscription-username">
-              <?php echo htmlspecialchars($user['display_name']); ?>
-              <?php if($user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
+              <?php echo htmlspecialchars($user['display_name'] ?? 'Unknown'); ?>
+              <?php if(isset($user['is_verified']) && $user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
             </div>
-            <div class="subscription-handle">@<?php echo htmlspecialchars($user['username']); ?></div>
+            <div class="subscription-handle">@<?php echo htmlspecialchars($user['username'] ?? 'unknown'); ?></div>
           </div>
           <div class="subscription-actions">
             <a href="/messages-compose.php?to=<?php echo $user['id']; ?>" class="subscription-btn message" onclick="event.stopPropagation();"><i class="bi bi-chat"></i> Message</a>
             <button class="subscription-btn tip" onclick="event.stopPropagation();showTipModal(<?php echo $user['id']; ?>)"><i class="bi bi-currency-dollar"></i> Tip</button>
           </div>
-          <?php if($user['is_free']): ?>
+          <?php if(isset($user['is_free']) && $user['is_free']): ?>
           <div class="subscription-badge free"><i class="bi bi-gift"></i> SUBSCRIBED FOR FREE</div>
-          <?php elseif($user['is_subscribed']): ?>
-          <div class="subscription-badge premium"><i class="bi bi-star-fill"></i> SUBSCRIBED - $<?php echo number_format($user['subscription_price'],2); ?>/mo</div>
+          <?php elseif(isset($user['is_subscribed']) && $user['is_subscribed']): ?>
+          <div class="subscription-badge premium"><i class="bi bi-star-fill"></i> SUBSCRIBED - $<?php echo number_format($user['subscription_price'] ?? 0, 2); ?>/mo</div>
           <?php else: ?>
           <div class="subscription-badge" style="border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,.1)"><i class="bi bi-lock-fill"></i> NOT SUBSCRIBED</div>
           <?php endif; ?>
@@ -438,7 +465,9 @@ include 'views/header.php';
       </div>
     <?php endforeach; ?>
   </div>
+  <?php endif; ?>
 
+  <?php if (count($users) > 0): ?>
   <!-- Browse All Users Section -->
   <div class="section-header" style="margin-top:3rem">
     <h2 class="section-title">
@@ -450,26 +479,34 @@ include 'views/header.php';
   <div id="usersList">
     <?php foreach($users as $user): ?>
       <div class="user-list-item creator-item"
-           data-name="<?php echo strtolower(htmlspecialchars($user['display_name'])); ?>" 
-           data-username="<?php echo strtolower(htmlspecialchars($user['username'])); ?>"
-           data-online="<?php echo $user['is_online'] ? '1' : '0'; ?>"
-           data-verified="<?php echo $user['is_verified'] ? '1' : '0'; ?>"
-           data-subscribed="<?php echo $user['is_subscribed'] ? '1' : '0'; ?>"
-           data-free="<?php echo $user['is_free'] ? '1' : '0'; ?>"
+           data-name="<?php echo strtolower(htmlspecialchars($user['display_name'] ?? '')); ?>" 
+           data-username="<?php echo strtolower(htmlspecialchars($user['username'] ?? '')); ?>"
+           data-online="<?php echo isset($user['is_online']) && $user['is_online'] ? '1' : '0'; ?>"
+           data-verified="<?php echo isset($user['is_verified']) && $user['is_verified'] ? '1' : '0'; ?>"
+           data-subscribed="<?php echo isset($user['is_subscribed']) && $user['is_subscribed'] ? '1' : '0'; ?>"
+           data-free="<?php echo isset($user['is_free']) && $user['is_free'] ? '1' : '0'; ?>"
            onclick="window.location.href='/profile.php?id=<?php echo $user['id']; ?>'">
         <div class="user-list-avatar">
-          <img src="<?php echo htmlspecialchars($user['avatar']); ?>" alt="Avatar">
-          <?php if($user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
+          <img src="<?php echo htmlspecialchars($user['avatar'] ?? '/assets/img/default-avatar.png'); ?>" alt="Avatar">
+          <?php if(isset($user['is_online']) && $user['is_online']): ?><div class="online-indicator"></div><?php endif; ?>
         </div>
         <div class="user-list-info">
           <div class="user-list-username">
-            <?php echo htmlspecialchars($user['display_name']); ?>
-            <?php if($user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
+            <?php echo htmlspecialchars($user['display_name'] ?? 'Unknown'); ?>
+            <?php if(isset($user['is_verified']) && $user['is_verified']): ?><i class="bi bi-patch-check-fill" style="color:#4267f5"></i><?php endif; ?>
           </div>
           <div class="user-list-meta">
-            <span><i class="bi bi-at"></i> <?php echo htmlspecialchars($user['username']); ?></span>
-            <span>• <?php echo $user['is_online'] ? '<i class="bi bi-circle-fill" style="color:var(--green);font-size:0.5rem"></i> Online now' : 'Last seen '.timeAgo($user['last_seen']); ?></span>
-            <span>• <i class="bi bi-file-post"></i> <?php echo number_format($user['post_count']); ?> posts</span>
+            <span><i class="bi bi-at"></i> <?php echo htmlspecialchars($user['username'] ?? 'unknown'); ?></span>
+            <span>• <?php 
+              if (isset($user['is_online']) && $user['is_online']) {
+                echo '<i class="bi bi-circle-fill" style="color:var(--green);font-size:0.5rem"></i> Online now';
+              } else if (isset($user['last_seen'])) {
+                echo 'Last seen ' . timeAgo($user['last_seen']);
+              } else {
+                echo 'Offline';
+              }
+            ?></span>
+            <span>• <i class="bi bi-file-post"></i> <?php echo number_format($user['post_count'] ?? 0); ?> posts</span>
           </div>
         </div>
         <div class="user-list-actions">
@@ -479,8 +516,18 @@ include 'views/header.php';
       </div>
     <?php endforeach; ?>
   </div>
+  <?php endif; ?>
 
-  <!-- Empty State -->
+  <?php if (count($featured_creators) === 0 && count($users) === 0): ?>
+  <!-- Empty State - No creators available -->
+  <div class="empty-state">
+    <i class="bi bi-people"></i>
+    <h3>No creators available yet</h3>
+    <p>Check back soon for amazing content creators!</p>
+  </div>
+  <?php endif; ?>
+
+  <!-- Empty State for filtered results -->
   <div class="empty-state" id="emptyState" style="display:none">
     <i class="bi bi-search"></i>
     <h3>No creators found</h3>
@@ -504,9 +551,11 @@ include 'views/header.php';
   let currentSort = 'featured';
   
   // Search functionality
-  searchInput.addEventListener('input', function() {
-    filterCreators();
-  });
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      filterCreators();
+    });
+  }
   
   // Filter chips
   filterChips.forEach(chip => {
@@ -519,10 +568,12 @@ include 'views/header.php';
   });
   
   // Sort functionality
-  sortSelect.addEventListener('change', function() {
-    currentSort = this.value;
-    sortCreators();
-  });
+  if (sortSelect) {
+    sortSelect.addEventListener('change', function() {
+      currentSort = this.value;
+      sortCreators();
+    });
+  }
   
   // View toggle
   viewBtns.forEach(btn => {
@@ -530,21 +581,23 @@ include 'views/header.php';
       viewBtns.forEach(b => b.classList.remove('active'));
       this.classList.add('active');
       const view = this.dataset.view;
-      if (view === 'list') {
-        featuredGrid.classList.add('list-view');
-      } else {
-        featuredGrid.classList.remove('list-view');
+      if (featuredGrid) {
+        if (view === 'list') {
+          featuredGrid.classList.add('list-view');
+        } else {
+          featuredGrid.classList.remove('list-view');
+        }
       }
     });
   });
   
   function filterCreators() {
-    const searchTerm = searchInput.value.toLowerCase();
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
     let visibleCount = 0;
     
     creatorItems.forEach(item => {
-      const name = item.dataset.name;
-      const username = item.dataset.username;
+      const name = item.dataset.name || '';
+      const username = item.dataset.username || '';
       const matchesSearch = name.includes(searchTerm) || username.includes(searchTerm);
       
       let matchesFilter = true;
@@ -561,7 +614,9 @@ include 'views/header.php';
       }
     });
     
-    emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+    if (emptyState) {
+      emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
   }
   
   function sortCreators() {
