@@ -13,15 +13,20 @@ if(checkMaintenanceMode($db)) {
     exit();
 }
 
-// Check if current user is a creator
+// Check if current user is a creator (via creator_settings table)
 $is_creator = false;
 if(isset($_SESSION['user_id'])) {
-    $check_query = "SELECT creator FROM users WHERE id = :user_id";
-    $stmt = $db->prepare($check_query);
-    $stmt->bindParam(':user_id', $_SESSION['user_id']);
-    $stmt->execute();
-    $user_data = $stmt->fetch();
-    $is_creator = ($user_data && $user_data['creator'] == 1);
+    try {
+        $check_query = "SELECT is_creator FROM creator_settings WHERE user_id = :user_id AND is_creator = 1";
+        $stmt = $db->prepare($check_query);
+        $stmt->bindParam(':user_id', $_SESSION['user_id']);
+        $stmt->execute();
+        $creator_data = $stmt->fetch();
+        $is_creator = ($creator_data && $creator_data['is_creator'] == 1);
+    } catch (PDOException $e) {
+        // Table might not exist yet, default to false
+        $is_creator = false;
+    }
 }
 
 // Initialize arrays
@@ -29,7 +34,7 @@ $featured_creators = [];
 $users = [];
 
 try {
-    // Fetch featured creators (verified or creator badge holders)
+    // Fetch featured creators (verified users)
     $featured_query = "
         SELECT 
             u.id,
@@ -37,7 +42,6 @@ try {
             COALESCE(u.username, '') as display_name,
             u.avatar,
             u.verified,
-            u.creator,
             u.last_seen,
             CASE 
                 WHEN TIMESTAMPDIFF(MINUTE, u.last_seen, NOW()) < 15 THEN 1 
@@ -49,8 +53,8 @@ try {
             0 as is_subscribed,
             0 as is_free
         FROM users u
-        WHERE (u.verified = 1 OR u.creator = 1)
-        ORDER BY u.verified DESC, u.creator DESC, u.last_seen DESC
+        WHERE u.verified = 1
+        ORDER BY u.last_seen DESC
         LIMIT 12
     ";
     
@@ -61,13 +65,13 @@ try {
     // Process featured creators
     foreach ($featured_creators as &$creator) {
         $creator['is_verified'] = (int)$creator['verified'];
-        $creator['is_creator'] = (int)$creator['creator'];
+        $creator['is_creator'] = 1; // Featured users are creators
         $creator['avatar'] = getUserAvatar($creator['avatar']);
         $creator['cover_image'] = getUserCover($creator['cover_image'] ?? '');
     }
     unset($creator);
     
-    // Fetch all active users
+    // Fetch all other users
     $users_query = "
         SELECT 
             u.id,
@@ -75,7 +79,6 @@ try {
             COALESCE(u.username, '') as display_name,
             u.avatar,
             u.verified,
-            u.creator,
             u.last_seen,
             CASE 
                 WHEN TIMESTAMPDIFF(MINUTE, u.last_seen, NOW()) < 15 THEN 1 
@@ -87,9 +90,9 @@ try {
             0 as is_subscribed,
             0 as is_free
         FROM users u
-        WHERE u.id NOT IN (SELECT id FROM users WHERE verified = 1 OR creator = 1)
+        WHERE u.verified = 0
         ORDER BY u.last_seen DESC
-        LIMIT 50
+        LIMIT 100
     ";
     
     $stmt = $db->prepare($users_query);
@@ -99,7 +102,7 @@ try {
     // Process users
     foreach ($users as &$user) {
         $user['is_verified'] = (int)$user['verified'];
-        $user['is_creator'] = (int)$user['creator'];
+        $user['is_creator'] = 0; // Regular users
         $user['avatar'] = getUserAvatar($user['avatar']);
         $user['cover_image'] = getUserCover($user['cover_image'] ?? '');
     }
@@ -487,7 +490,7 @@ include 'views/header.php';
   <div class="stats-bar">
     <div class="stat-box">
       <div class="stat-value"><?php echo count($featured_creators) + count($users); ?></div>
-      <div class="stat-label">Total Creators</div>
+      <div class="stat-label">Total Users</div>
     </div>
     <div class="stat-box">
       <div class="stat-value"><?php 
@@ -509,21 +512,18 @@ include 'views/header.php';
   <div class="search-filter-section">
     <div class="search-box">
       <i class="bi bi-search search-icon"></i>
-      <input type="text" class="search-input" placeholder="Search creators by name or username..." id="creatorSearch">
+      <input type="text" class="search-input" placeholder="Search by name or username..." id="creatorSearch">
     </div>
     
     <div class="filter-chips">
       <button class="filter-chip active" data-filter="all">
-        <i class="bi bi-grid-3x3"></i> All Creators
+        <i class="bi bi-grid-3x3"></i> All Users
       </button>
       <button class="filter-chip" data-filter="online">
         <i class="bi bi-circle-fill" style="color:var(--green);font-size:0.6rem"></i> Online
       </button>
       <button class="filter-chip" data-filter="verified">
         <i class="bi bi-patch-check-fill"></i> Verified
-      </button>
-      <button class="filter-chip" data-filter="creator">
-        <i class="bi bi-star-fill"></i> Creators
       </button>
     </div>
 
@@ -539,11 +539,11 @@ include 'views/header.php';
   </div>
 
   <?php if (count($featured_creators) > 0): ?>
-  <!-- Featured Creators Section -->
+  <!-- Featured Users Section -->
   <div class="section-header">
     <h2 class="section-title">
       <i class="bi bi-star-fill" style="color:var(--orange)"></i>
-      Featured Creators
+      Featured Users
     </h2>
     <div class="view-toggle">
       <button class="view-btn active" data-view="grid"><i class="bi bi-grid-3x3"></i></button>
@@ -587,8 +587,8 @@ include 'views/header.php';
             <a href="/messages-compose.php?to=<?php echo $user['id']; ?>" class="subscription-btn message" onclick="event.stopPropagation();"><i class="bi bi-chat"></i> Message</a>
             <a href="/profile.php?id=<?php echo $user['id']; ?>" class="subscription-btn tip" onclick="event.stopPropagation();"><i class="bi bi-person"></i> View Profile</a>
           </div>
-          <?php if($user['is_creator']): ?>
-          <div class="subscription-badge premium"><i class="bi bi-star-fill"></i> CONTENT CREATOR</div>
+          <?php if($user['is_verified']): ?>
+          <div class="subscription-badge premium"><i class="bi bi-patch-check-fill"></i> VERIFIED</div>
           <?php endif; ?>
         </div>
       </div>
@@ -601,7 +601,7 @@ include 'views/header.php';
   <div class="section-header" style="margin-top:3rem">
     <h2 class="section-title">
       <i class="bi bi-people-fill" style="color:var(--cyan)"></i>
-      Browse All Users
+      All Users
     </h2>
   </div>
 
@@ -646,18 +646,18 @@ include 'views/header.php';
   <?php endif; ?>
 
   <?php if (count($featured_creators) === 0 && count($users) === 0): ?>
-  <!-- Empty State - No creators available -->
+  <!-- Empty State - No users available -->
   <div class="empty-state">
     <i class="bi bi-people"></i>
-    <h3>No creators available yet</h3>
-    <p>Check back soon for amazing content creators!</p>
+    <h3>No users available yet</h3>
+    <p>Check back soon!</p>
   </div>
   <?php endif; ?>
 
   <!-- Empty State for filtered results -->
   <div class="empty-state" id="emptyState" style="display:none">
     <i class="bi bi-search"></i>
-    <h3>No creators found</h3>
+    <h3>No users found</h3>
     <p>Try adjusting your search or filters</p>
   </div>
 
@@ -730,7 +730,6 @@ include 'views/header.php';
       let matchesFilter = true;
       if (currentFilter === 'online') matchesFilter = item.dataset.online === '1';
       else if (currentFilter === 'verified') matchesFilter = item.dataset.verified === '1';
-      else if (currentFilter === 'creator') matchesFilter = item.dataset.creator === '1';
       
       if (matchesSearch && matchesFilter) {
         item.style.display = '';
